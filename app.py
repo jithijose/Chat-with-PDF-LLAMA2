@@ -4,13 +4,21 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings 
 
 from langchain.vectorstores.faiss import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from langchain_community.llms import CTransformers
+from ctransformers import AutoConfig,AutoModelForCausalLM
 from dotenv import load_dotenv
 
+#config = AutoConfig.from_pretrained('models/llama-2-7b-ggml-model-f16-q4_0.bin')
+# Explicitly set the max_seq_len
+#config.max_seq_len = 4096
+#config.max_answer_len= 1024
+#config.max_new_tokens = 2048
+#config.context_length = 4096
 
 # read the pdf files and extract text from files
 def get_pdf_text(pdf_docs):
@@ -24,12 +32,12 @@ def get_pdf_text(pdf_docs):
 
 # convert text into chunks
 def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
     chunks = text_splitter.split_text(text)
     return chunks
 
 def get_vector_stores(text_chunks):
-    embeddings = GoogleGenerativeAIEmbeddings(model='models/embedding-001')
+    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-mpnet-base-v2')
     vectore_store = FAISS.from_texts(text_chunks, embedding=embeddings)
     vectore_store.save_local('faiss_index')
 
@@ -44,17 +52,17 @@ def get_conversational_chain():
     Answer: 
 
     """
-    llm=CTransformers(model='models/llama-2-7b-ggml-model-f16-q4_0.bin',
-                      model_type='llama',
-                      config={'max_new_tokens':256,
+    llm=CTransformers(model='models/llama-2-7b-ggml-model-f16-q4_0.bin',                      model_type='llama',
+                      config={'max_new_tokens':600,
                               'temperature': 0.01,
-                              'gpu_layers':1})
+                              'gpu_layers':1,
+                              'context_length':1200})
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
     chain = load_qa_chain(llm, chain_type="stuff", prompt=prompt)
     return chain
 
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-mpnet-base-v2')
 
     new_db = FAISS.load_local('faiss_index', embeddings,allow_dangerous_deserialization=True)
     docs = new_db.similarity_search(user_question)
@@ -70,7 +78,7 @@ def user_input(user_question):
 
 def main():
     st.set_page_config('Chat with Multiple PDF')
-    st.header('Chat with multiple PDF using Gemini')
+    st.header('Chat with multiple PDF using LLAMA2')
 
     user_question = st.text_input("Ask a question from the PDF files")
 
